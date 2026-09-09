@@ -1,0 +1,110 @@
+# Server block for OmniTools. Rendered to /etc/nginx/conf.d/default.conf by
+# /docker-entrypoint.d/40-omnitools.sh, which substitutes ${PORT} and nothing
+# else. Every other $variable below is nginx's own and must survive verbatim.
+#
+# nginx drops every INHERITED add_header in any block that declares one of its
+# own, so each location that sets Cache-Control has to re-include the shared
+# header snippet. Adding an add_header here without that include would silently
+# strip the CSP and HSTS from those responses, and only curl -I would show it.
+
+server {
+    listen      ${PORT} default_server;
+    server_name _;
+
+    root  /usr/share/nginx/html;
+    index index.html;
+
+    charset utf-8;
+
+    # The edge routes strictly by Host, so nginx must not build absolute
+    # redirects from the container's own port.
+    absolute_redirect off;
+    port_in_redirect  off;
+
+    # Nothing here accepts uploads: every file a visitor opens is read by the
+    # page and never sent to this server.
+    client_max_body_size 1m;
+
+    # Empty unless the operator set OMNITOOLS_USERNAME and OMNITOOLS_PASSWORD.
+    include /etc/nginx/snippets/auth.conf;
+
+    # Railway's health probe is anonymous, so it would be answered 401 by the
+    # basic-auth block above and fail the deployment. auth_basic off on an
+    # exact-match location outranks the server-level directive for this one
+    # path. Serving the real index.html keeps it a genuine check: it fails if
+    # the static build is missing rather than merely proving nginx is alive.
+    location = /healthz {
+        auth_basic off;
+        include /etc/nginx/snippets/headers.conf;
+        add_header Cache-Control 'no-store' always;
+        try_files /index.html =404;
+    }
+
+    # Vite content-hashes every code asset it emits (index-CaDyy6Mg.js,
+    # ort-wasm-simd-threaded.jsep-D5Jk56-t.wasm), so a given name can never
+    # change contents and is safe to cache forever. Unhashed assets that live
+    # beside them -- background.svg, the fonts -- fall through to the block
+    # below and revalidate instead.
+    #
+    # The regex must stay quoted: nginx reads an unquoted { or } in a location
+    # pattern as a block delimiter and fails to parse.
+    location ~ "^/assets/.+-[A-Za-z0-9_-]{8}\.(js|mjs|css|wasm)$" {
+        include /etc/nginx/snippets/headers.conf;
+        add_header Cache-Control 'public, max-age=31536000, immutable' always;
+        try_files $uri =404;
+    }
+
+    # Everything else under /assets is still a build artifact: serve it, but
+    # never fall through to index.html. A missing chunk answered with the HTML
+    # shell is the classic blank-page-behind-200s failure -- the browser
+    # refuses a module script served as text/html and nothing logs an error.
+    location /assets/ {
+        include /etc/nginx/snippets/headers.conf;
+        add_header Cache-Control 'no-cache' always;
+        try_files $uri =404;
+    }
+
+    # Translation bundles, fetched by i18next per language and namespace. Same
+    # rule: a missing namespace must 404 rather than resolve to the HTML shell,
+    # which i18next would try to parse as JSON.
+    location /locales/ {
+        include /etc/nginx/snippets/headers.conf;
+        add_header Cache-Control 'no-cache' always;
+        try_files $uri =404;
+    }
+
+    # Written at boot from ROBOTS_POLICY. Kept outside basic auth so a crawler
+    # that would otherwise get a 401 can still read the disallow.
+    location = /robots.txt {
+        auth_basic off;
+        include /etc/nginx/snippets/headers.conf;
+        add_header Cache-Control 'no-cache' always;
+    }
+
+    # Netlify control files that ride along in the build. They mean nothing to
+    # nginx, and _redirects only restates the SPA fallback below.
+    location ~ ^/_(headers|redirects)$ {
+        include /etc/nginx/snippets/headers.conf;
+        return 404;
+    }
+
+    # An unreferenced placeholder that upstream ships for a Ghostscript WASM
+    # module which was never compiled; the real one is bundled under /assets.
+    # Truncated at build, and refused here so it cannot be loaded at all.
+    location = /gs.js {
+        include /etc/nginx/snippets/headers.conf;
+        return 404;
+    }
+
+    # OmniTools is a single-page app -- every tool is a client-side route, so
+    # an unknown path renders the app rather than a 404. Safe here only because
+    # /assets/ and /locales/ are handled above and never reach this fallback.
+    location / {
+        include /etc/nginx/snippets/headers.conf;
+        # index.html is rewritten by every release under the same name, so it
+        # must revalidate. `no-cache` still lets the browser keep its copy; it
+        # just asks first, and nginx answers 304 from the ETag.
+        add_header Cache-Control 'no-cache' always;
+        try_files $uri $uri/ /index.html;
+    }
+}
