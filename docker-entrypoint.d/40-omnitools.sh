@@ -61,9 +61,12 @@ esac
 # CSP_DATA_HOSTS serves models, training data and icon JSON, which the page
 # only ever fetches, so it appears in connect-src alone.
 #
-# Setting both to the empty string seals the instance: the features above stop
-# working and everything self-contained -- text, list, number, date, JSON, CSV,
-# XML, most image tools and every PDF tool -- carries on.
+# Setting both to `none` seals the instance: the features above stop working and
+# everything self-contained -- text, list, number, date, JSON, CSV, XML, most
+# image tools and every PDF tool -- carries on. `none` rather than an empty
+# string because Railway does not inject a variable whose value is empty, so an
+# empty one is indistinguishable from an unset one and would silently take the
+# default list back.
 #
 # 'wasm-unsafe-eval' is what lets the page compile WebAssembly at all; without
 # it the PDF, image and video engines fail on a CSP violation. It is strictly
@@ -77,6 +80,8 @@ esac
 # script from the CDN, wraps the bytes in a Blob and runs that.
 : "${CSP_CDN_HOSTS:=https://cdn.jsdelivr.net https://unpkg.com}"
 : "${CSP_DATA_HOSTS:=https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com https://staticimgly.com https://tessdata.projectnaptha.com}"
+case "$CSP_CDN_HOSTS"  in none|NONE) CSP_CDN_HOSTS="";  log "third-party script origins disabled" ;; esac
+case "$CSP_DATA_HOSTS" in none|NONE) CSP_DATA_HOSTS=""; log "third-party data origins disabled"   ;; esac
 # ghbtns.com is the GitHub star button in the navbar; *.simplepdf.com is the
 # embedded editor behind the "PDF editor" tool. blob: and data: are the
 # in-page preview frames every PDF tool renders its result in.

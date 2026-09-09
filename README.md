@@ -50,10 +50,12 @@ configuration.
 | `staticimgly.com` | the ONNX model behind background removal | Remove Background |
 | `tessdata.projectnaptha.com` | tesseract.js training data on releases that use it rather than jsDelivr | Image to Text |
 
-`CSP_CDN_HOSTS` and `CSP_DATA_HOSTS` name exactly those origins. Set both to the
-empty string to seal the instance: the tools above stop working, and everything
+`CSP_CDN_HOSTS` and `CSP_DATA_HOSTS` name exactly those origins. Set both to
+`none` to seal the instance: the tools above stop working, and everything
 self-contained — text, list, number, date, JSON, CSV, XML, most image tools and
-every PDF tool — carries on.
+every PDF tool — carries on. (`none` rather than an empty string, because
+Railway does not inject a variable whose value is empty, so an empty one would
+silently take the default list back.)
 
 Two third-party frames are part of upstream's UI and are allowed by
 `CSP_FRAME_SRC`: the GitHub star button in the navbar (`ghbtns.com`) and the
@@ -70,8 +72,8 @@ instance.
 | `OMNITOOLS_USERNAME` | unset | Turns on HTTP basic auth. Must be set with `OMNITOOLS_PASSWORD`; setting exactly one fails the boot rather than leaving the site open. |
 | `OMNITOOLS_PASSWORD` | unset | Bcrypt-hashed into an htpasswd file at boot. |
 | `ROBOTS_POLICY` | `noindex` | `noindex` serves `Disallow: /`. `allow` for an instance meant to be found. |
-| `CSP_CDN_HOSTS` | jsDelivr, unpkg | Origins allowed to serve scripts, styles and fonts. |
-| `CSP_DATA_HOSTS` | Iconify ×3, staticimgly, tessdata | Origins the page may fetch data from. |
+| `CSP_CDN_HOSTS` | jsDelivr, unpkg | Origins allowed to serve scripts, styles and fonts. `none` allows none. |
+| `CSP_DATA_HOSTS` | Iconify ×3, staticimgly, tessdata | Origins the page may fetch data from. `none` allows none. |
 | `CSP_FRAME_SRC` | `'self' blob: data: https://ghbtns.com https://*.simplepdf.com` | What may be framed by the page. |
 | `CSP_FRAME_ANCESTORS` | `'none'` | Who may frame the page. `X-Frame-Options: DENY` is dropped automatically when this changes. |
 | `CONTENT_SECURITY_POLICY` | built from the four above | Replaces the whole policy; `off` sends no CSP header. |
